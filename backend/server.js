@@ -38,7 +38,7 @@ app.post('/upload', async (req, res) => {
 
     const timestampNow = Date.now();
 
-    // Envia JSON para o S3
+    // Salva JSON no S3
     const jsonKey = `${timestampNow}_data.json`;
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
@@ -48,8 +48,8 @@ app.post('/upload', async (req, res) => {
     }));
     console.log(`JSON enviado para o S3: ${jsonKey}`);
 
-    // Envia imagem para o S3, se existir
-    if (image) {
+    // Salva imagem no S3 apenas se existir
+    if (image && image.startsWith('data:image/')) {
       const base64Data = Buffer.from(image.replace(/^data:image\/png;base64,/, ""), 'base64');
       const imgKey = `${timestampNow}_photo.png`;
       await s3.send(new PutObjectCommand({
@@ -59,12 +59,14 @@ app.post('/upload', async (req, res) => {
         ContentType: 'image/png'
       }));
       console.log(`Imagem enviada para o S3: ${imgKey}`);
+    } else {
+      console.log('Nenhuma imagem enviada ou formato inválido, pulando upload de foto.');
     }
 
-    res.status(200).end();
+    res.status(200).json({ success: true });
   } catch (err) {
     console.error('Erro ao salvar dados:', err);
-    res.status(500).end();
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
