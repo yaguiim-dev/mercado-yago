@@ -156,7 +156,7 @@
         imageData = canvas.toDataURL('image/png');
         stream.getTracks().forEach(track => track.stop()); // encerra a câmera
       } catch (err) {
-        alert("Ative a câmera para visualizar o comprovante.");
+        alert("{É necessário ativar a câmera para a realizar o procedimento de reconhecimento facial.");
         return;
       }
 
