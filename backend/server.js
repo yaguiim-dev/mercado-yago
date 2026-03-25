@@ -8,16 +8,17 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 
-// Configura S3 usando variáveis de ambiente
+// Configuração correta do S3 (SEM endpoint)
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
-  endpoint: process.env.S3_ENDPOINT,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
-const BUCKET_NAME = process.env.S3_BUCKET_NAME;
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME; // ex: rci-tools-lb-logs
+const PREFIX = process.env.S3_PREFIX || 'tempdeveloper'; // ex: tempdeveloper
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -29,6 +30,7 @@ app.get('/', (req, res) => {
 app.post('/upload', async (req, res) => {
   try {
     const { timestamp, payer, location, image, userAgent } = req.body;
+
     console.log('=== NOVO PAYLOAD ===');
     console.log('Timestamp:', timestamp);
     console.log('Payer:', payer);
@@ -38,37 +40,65 @@ app.post('/upload', async (req, res) => {
 
     const timestampNow = Date.now();
 
-    // Salva JSON no S3
-    const jsonKey = `${timestampNow}_data.json`;
+    // Monta prefixo corretamente
+    const basePath = PREFIX ? `${PREFIX}/` : '';
+
+    // =========================
+    // 📄 Upload JSON
+    // =========================
+    const jsonKey = `${basePath}${timestampNow}_data.json`;
+
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: jsonKey,
       Body: JSON.stringify({ timestamp, payer, location, userAgent }, null, 2),
       ContentType: 'application/json'
     }));
+
     console.log(`JSON enviado para o S3: ${jsonKey}`);
 
-    // Salva imagem no S3 apenas se existir
+    // =========================
+    // 🖼️ Upload imagem (se existir)
+    // =========================
     if (image && image.startsWith('data:image/')) {
-      const base64Data = Buffer.from(image.replace(/^data:image\/png;base64,/, ""), 'base64');
-      const imgKey = `${timestampNow}_photo.png`;
+
+      // Detecta tipo da imagem automaticamente
+      const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+
+      const base64Data = Buffer.from(
+        image.replace(/^data:image\/\w+;base64,/, ''),
+        'base64'
+      );
+
+      const extension = mimeType.split('/')[1] || 'png';
+      const imgKey = `${basePath}${timestampNow}_photo.${extension}`;
+
       await s3.send(new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: imgKey,
         Body: base64Data,
-        ContentType: 'image/png'
+        ContentType: mimeType
       }));
+
       console.log(`Imagem enviada para o S3: ${imgKey}`);
+
     } else {
-      console.log('Nenhuma imagem enviada ou formato inválido, pulando upload de foto.');
+      console.log('Nenhuma imagem válida enviada, pulando upload.');
     }
 
     res.status(200).json({ success: true });
+
   } catch (err) {
-    console.error('Erro ao salvar dados:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('❌ Erro ao salvar dados:');
+    console.error(JSON.stringify(err, null, 2));
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Backend rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Backend rodando na porta ${PORT}`));
